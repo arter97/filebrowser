@@ -1,6 +1,7 @@
 import { createURL, fetchURL, removePrefix } from "./utils";
 import { baseURL } from "@/utils/constants";
 import store from "@/store";
+import {upload as postTus, chunkSize} from "./tus";
 
 export async function fetch(url) {
   url = removePrefix(url);
@@ -78,6 +79,30 @@ export function download(format, ...files) {
 }
 
 export async function post(url, content = "", overwrite = false, onupload) {
+  // Use the pre-existing API if: when creating a directory or file is smaller than chunk size (Tus requires more operations for deleting, moving files etc.)
+  const useResourcesApi =
+    // a folder is being created
+    url.endsWith("/") || 
+    // file is smaller than the upload chunk size
+    (content instanceof Blob && content.size < chunkSize) ||
+    // We're not using http(s)
+    (content instanceof Blob && !["http:", "https:"].includes(window.location.protocol));
+
+  console.warn(chunkSize);
+  console.warn(content.size);
+  console.warn(useResourcesApi);
+
+  return useResourcesApi
+    ? postResources(url, content, overwrite, onupload)
+    : postTus(url, content, overwrite, onupload);
+}
+
+async function postResources(
+  url,
+  content = "",
+  overwrite = false,
+  onupload
+) {
   url = removePrefix(url);
 
   let bufferContent;
@@ -121,7 +146,6 @@ export async function post(url, content = "", overwrite = false, onupload) {
 
 function moveCopy(items, copy = false, overwrite = false, rename = false) {
   let promises = [];
-
   for (let item of items) {
     const from = item.from;
     const to = encodeURIComponent(removePrefix(item.to));
