@@ -65,7 +65,11 @@ func NewHandler(
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")
 	api.PathPrefix("/resources").Handler(monkey(resourcePatchHandler(fileCache), "/api/resources")).Methods("PATCH")
 
-	api.PathPrefix("/tus").Handler(NewTusHandler(store, server))
+	tusHandler, err := NewTusHandler(store, server)
+	if err != nil {
+		return nil, err
+	}
+	api.PathPrefix("/tus").Handler(tusHandler)
 
 	api.PathPrefix("/usage").Handler(monkey(diskUsage, "/api/usage")).Methods("GET")
 

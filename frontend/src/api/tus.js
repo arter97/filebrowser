@@ -6,6 +6,7 @@ import { removePrefix } from "./utils";
 // Make following configurable by envs?
 export const chunkSize = 20 * 1000 * 1000;
 const parallelUploads = 3;
+const retryDelays = [0, 3000, 5000, 10000, 20000];
 
 export async function upload(url, content = "", overwrite = false, onupload) {
   return new Promise((resolve, reject) => {
@@ -13,7 +14,7 @@ export async function upload(url, content = "", overwrite = false, onupload) {
       httpStack: new CustomHTTPStack(),
       endpoint: tusEndpoint,
       chunkSize: chunkSize,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
+      retryDelays: retryDelays,
       parallelUploads: parallelUploads,
       metadata: {
         filename: content.name,

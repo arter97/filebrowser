@@ -23,19 +23,25 @@ import (
 type tusHandler struct {
 	store         *storage.Storage
 	server        *settings.Server
+	settings      *settings.Settings
 	uploadDirName string
 	handlers      map[uint]*tusd.UnroutedHandler
 }
 
 var mutex sync.Mutex
 
-func NewTusHandler(store *storage.Storage, server *settings.Server) tusHandler {
+func NewTusHandler(store *storage.Storage, server *settings.Server) (tusHandler, error) {
 	tusHandler := tusHandler{}
 	tusHandler.store = store
 	tusHandler.server = server
 	tusHandler.uploadDirName = ".tmp_upload"
 	tusHandler.handlers = make(map[uint]*tusd.UnroutedHandler)
-	return tusHandler
+
+	var err error
+	if tusHandler.settings, err = store.Settings.Get(); err != nil {
+		return tusHandler, errors.New(fmt.Sprintf("Couldn't get settings: %s", err))
+	}
+	return tusHandler, nil
 }
 
 func (th tusHandler) getOrCreateTusHandler(d *data) *tusd.UnroutedHandler {
@@ -50,12 +56,6 @@ func (th tusHandler) getOrCreateTusHandler(d *data) *tusd.UnroutedHandler {
 }
 
 func (th tusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	settings, err := th.store.Settings.Get()
-	if err != nil {
-		log.Fatalf("ERROR: couldn't get settings: %v\n", err)
-		return
-	}
 
 	code, err := withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		// Create a new tus handler for current user if it doesn't exist yet
@@ -85,7 +85,7 @@ func (th tusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return 201, nil
 	})(w, r, &data{
 		store:    th.store,
-		settings: settings,
+		settings: th.settings,
 		server:   th.server,
 	})
 
@@ -113,84 +113,89 @@ func (th tusHandler) createTusHandler(d *data) *tusd.UnroutedHandler {
 		panic(fmt.Errorf("Unable to create handler: %s", err))
 	}
 
-	go th.handleTusFileUploaded(handler, d)
+	// Goroutine to handle completed uploads
+	go func() {
+		for {
+			event := <-handler.CompleteUploads
+
+			if err := th.handleTusFileUploaded(handler, d, event); err != nil {
+				log.Printf("ERROR: couldn't handle completed upload: %s\n", err)
+			}
+		}
+	}()
 
 	return handler
 }
 
-func (th tusHandler) handleTusFileUploaded(handler *tusd.UnroutedHandler, d *data) {
-	for {
-		event := <-handler.CompleteUploads
+func readMetadata(metadata tusd.MetaData, field string) (string, error) {
+	if value, ok := metadata[field]; ok {
+		return value, nil
+	} else {
+		return "", errors.New(fmt.Sprintf("Metadata field %s not found in upload request", field))
+	}
+}
 
-		// Clean up only if an upload has been finalized
-		if !event.Upload.IsFinal {
-			continue
-		}
+func (th tusHandler) handleTusFileUploaded(handler *tusd.UnroutedHandler, d *data, event tusd.HookEvent) error {
+	// Clean up only if an upload has been finalized
+	if !event.Upload.IsFinal {
+		return nil
+	}
 
-		log.Printf("Final Upload of %s is finished. Moving file to target and cleaning up.\n", event.Upload.ID)
+	filename, err := readMetadata(event.Upload.MetaData, "filename")
+	if err != nil {
+		return err
+	}
+	destination, err := readMetadata(event.Upload.MetaData, "destination")
+	if err != nil {
+		return err
+	}
+	overwrite, err := readMetadata(event.Upload.MetaData, "overwrite")
+	if err != nil {
+		return err
+	}
+	uploadDir := filepath.Join(d.user.FullPath("/"), th.uploadDirName)
+	uploadedFile := filepath.Join(uploadDir, event.Upload.ID)
+	fullDestination := filepath.Join(d.user.FullPath("/"), destination)
 
-		uploadDir := filepath.Join(d.user.FullPath("/"), th.uploadDirName)
-		uploadedFile := filepath.Join(uploadDir, event.Upload.ID)
+	log.Printf("Upload of %s (%s) is finished. Moving file to destination (%s) "+
+		"and cleaning up temporary files.\n", filename, uploadedFile, fullDestination)
 
-		destination, ok := event.Upload.MetaData["destination"]
-		if !ok {
-			log.Fatalln("Could not process upload due to missing destination in metadata")
-			continue
-		}
-		fullDestination := filepath.Join(d.user.FullPath("/"), destination)
-
-		// Check if destination file already exists. If so, we require overwrite to be set
-		if _, err := os.Stat(fullDestination); !errors.Is(err, os.ErrNotExist) {
-			overwriteStr, ok := event.Upload.MetaData["overwrite"]
-			if !ok {
-				log.Fatalf("Could not process upload due to missing overwrite: %s\n", err)
-				continue
-			}
-			overwrite, err := strconv.ParseBool(overwriteStr)
-			if err != nil {
-				log.Fatalf("Could not process upload due to error: %s\n", err)
-				continue
-			}
-			if !overwrite {
-				log.Fatalf("Overwrite is set to false while destination file %s exists. Skipping upload.\n", destination)
-				continue
-			}
-			log.Printf("Overwriting existing destination file as overwrite is set to true: %s\n", destination)
-		}
-
-		// Move uploaded file from tmp upload folder to user folder
-		if err := os.Rename(uploadedFile, fullDestination); err != nil {
-			log.Fatalf("Could not move file from %s to %s: %s\n", uploadedFile, fullDestination, err)
-			continue
-		}
-
-		// Remove uploaded tmp files for this finished upload
-		for _, partialUpload := range append(event.Upload.PartialUploads, event.Upload.ID) {
-			filesToDelete, err := filepath.Glob(filepath.Join(uploadDir, partialUpload+"*"))
-			if err != nil {
-				log.Fatalf("Could not find temp files to delete: %s\n", err)
-				continue
-			}
-			log.Printf("Deleting temp files: %s\n", filesToDelete)
-			for _, f := range filesToDelete {
-				if err := os.Remove(f); err != nil {
-					log.Fatalf("Could not delete upload file %s: %s\n", f, err)
-					continue
-				}
-			}
-		}
-
-		// Delete folder basePath if it is empty
-		if dir, err := ioutil.ReadDir(uploadDir); err == nil {
-			if len(dir) == 0 {
-				log.Println("Temp upload dir is empty. Deleting it..")
-				if err := os.Remove(uploadDir); err != nil {
-					log.Fatalf("Could not delete upload dir %s: %s\n", uploadDir, err)
-					continue
-				}
-			}
-		} else {
-			log.Fatalf("Could not list files in base directory: %s\n", err)
+	// Check if destination file already exists. If so, we require overwrite to be set
+	if _, err := os.Stat(fullDestination); !errors.Is(err, os.ErrNotExist) {
+		if overwrite, err := strconv.ParseBool(overwrite); err != nil {
+			return err
+		} else if !overwrite {
+			return fmt.Errorf("Overwrite is set to false while destination file %s exists. Skipping upload.\n", destination)
 		}
 	}
+
+	// Move uploaded file from tmp upload folder to user folder
+	if err := os.Rename(uploadedFile, fullDestination); err != nil {
+		return err
+	}
+
+	// Remove uploaded tmp files for finished upload (.info objects are created and need to be removed, too))
+	for _, partialUpload := range append(event.Upload.PartialUploads, event.Upload.ID) {
+		if filesToDelete, err := filepath.Glob(filepath.Join(uploadDir, partialUpload+"*")); err != nil {
+			return err
+		} else {
+			for _, f := range filesToDelete {
+				if err := os.Remove(f); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Delete folder basePath if it is empty
+	if dir, err := ioutil.ReadDir(uploadDir); err != nil {
+		return err
+	} else if len(dir) == 0 {
+		// os.Remove won't remove non-empty folders in case of race condition
+		if err := os.Remove(uploadDir); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

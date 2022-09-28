@@ -79,7 +79,7 @@ export function download(format, ...files) {
 }
 
 export async function post(url, content = "", overwrite = false, onupload) {
-  // Use the pre-existing API if: when creating a directory or file is smaller than chunk size (Tus requires more operations for deleting, moving files etc.)
+  // Use the pre-existing API if:
   const useResourcesApi =
     // a folder is being created
     url.endsWith("/") || 
@@ -87,10 +87,6 @@ export async function post(url, content = "", overwrite = false, onupload) {
     (content instanceof Blob && content.size < chunkSize) ||
     // We're not using http(s)
     (content instanceof Blob && !["http:", "https:"].includes(window.location.protocol));
-
-  console.warn(chunkSize);
-  console.warn(content.size);
-  console.warn(useResourcesApi);
 
   return useResourcesApi
     ? postResources(url, content, overwrite, onupload)
