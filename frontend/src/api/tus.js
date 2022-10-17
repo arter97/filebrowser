@@ -20,7 +20,8 @@ export async function upload(url, content = "", overwrite = false, onupload) {
         filename: content.name,
         filetype: content.type,
         overwrite: overwrite,
-        destination: removePrefix(url),
+        // url is URI encoded and needs to be for metadata first
+        destination: decodeURIComponent(removePrefix(url)),
       },
       headers: {
         "X-Auth": store.state.jwt,
