@@ -149,7 +149,7 @@ func (th tusHandler) handleTusFileUploaded(handler *tusd.UnroutedHandler, d *dat
 	if err != nil {
 		return err
 	}
-	overwrite, err := readMetadata(event.Upload.MetaData, "overwrite")
+	overwriteStr, err := readMetadata(event.Upload.MetaData, "overwrite")
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (th tusHandler) handleTusFileUploaded(handler *tusd.UnroutedHandler, d *dat
 
 	// Check if destination file already exists. If so, we require overwrite to be set
 	if _, err := os.Stat(fullDestination); !errors.Is(err, os.ErrNotExist) {
-		if overwrite, err := strconv.ParseBool(overwrite); err != nil {
+		if overwrite, err := strconv.ParseBool(overwriteStr); err != nil {
 			return err
 		} else if !overwrite {
 			return fmt.Errorf("Overwrite is set to false while destination file %s exists. Skipping upload.\n", destination)

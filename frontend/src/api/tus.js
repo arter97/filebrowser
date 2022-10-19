@@ -19,7 +19,7 @@ export async function upload(url, content = "", overwrite = false, onupload) {
       metadata: {
         filename: content.name,
         filetype: content.type,
-        overwrite: overwrite,
+        overwrite: overwrite.toString(),
         // url is URI encoded and needs to be for metadata first
         destination: decodeURIComponent(removePrefix(url)),
       },
