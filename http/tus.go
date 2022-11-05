@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
@@ -26,16 +27,18 @@ type tusHandler struct {
 	settings      *settings.Settings
 	uploadDirName string
 	handlers      map[uint]*tusd.UnroutedHandler
+	apiPath       string
 }
 
 var mutex sync.Mutex
 
-func NewTusHandler(store *storage.Storage, server *settings.Server) (tusHandler, error) {
+func NewTusHandler(store *storage.Storage, server *settings.Server, apiPath string) (tusHandler, error) {
 	tusHandler := tusHandler{}
 	tusHandler.store = store
 	tusHandler.server = server
 	tusHandler.uploadDirName = ".tmp_upload"
 	tusHandler.handlers = make(map[uint]*tusd.UnroutedHandler)
+	tusHandler.apiPath = apiPath
 
 	var err error
 	if tusHandler.settings, err = store.Settings.Get(); err != nil {
@@ -44,14 +47,23 @@ func NewTusHandler(store *storage.Storage, server *settings.Server) (tusHandler,
 	return tusHandler, nil
 }
 
-func (th tusHandler) getOrCreateTusHandler(d *data) *tusd.UnroutedHandler {
+func (th tusHandler) getOrCreateTusHandler(d *data, r *http.Request) (*tusd.UnroutedHandler, error) {
 	if handler, ok := th.handlers[d.user.ID]; !ok {
 		log.Printf("Creating tus handler for user %s\n", d.user.Username)
-		handler = th.createTusHandler(d)
-		th.handlers[d.user.ID] = handler
-		return handler
+		// The tus protocol is designed to send a location header in its response, guiding the client to the correct endpoint.
+		// However, in proxied environments, we cannot know the correct URI at compile time
+		// We therefore make use of the Request-URI sent by the client (https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html)
+		// Since we know this URI always contains the api path we configured, we can form the basePath for tus accordingly
+		if idx := strings.Index(r.RequestURI, th.apiPath); idx < 0 {
+			return nil, fmt.Errorf("Expected URI to contain " + th.apiPath)
+		} else {
+			basePath := r.RequestURI[:(idx + len(th.apiPath))]
+			handler = th.createTusHandler(d, basePath)
+			th.handlers[d.user.ID] = handler
+			return handler, nil
+		}
 	} else {
-		return handler
+		return handler, nil
 	}
 }
 
@@ -61,8 +73,12 @@ func (th tusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Create a new tus handler for current user if it doesn't exist yet
 		// Use a mutex to make sure only one tus handler is created for each user
 		mutex.Lock()
-		handler := th.getOrCreateTusHandler(d)
+		handler, err := th.getOrCreateTusHandler(d, r)
 		mutex.Unlock()
+
+		if err != nil {
+			return 400, err
+		}
 
 		// Create upload directory for each request
 		uploadDir := filepath.Join(d.user.FullPath("/"), ".tmp_upload")
@@ -96,7 +112,7 @@ func (th tusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (th tusHandler) createTusHandler(d *data) *tusd.UnroutedHandler {
+func (th tusHandler) createTusHandler(d *data, basePath string) *tusd.UnroutedHandler {
 	uploadDir := filepath.Join(d.user.FullPath("/"), th.uploadDirName)
 	tusStore := filestore.FileStore{
 		Path: uploadDir,
@@ -105,7 +121,7 @@ func (th tusHandler) createTusHandler(d *data) *tusd.UnroutedHandler {
 	tusStore.UseIn(composer)
 
 	handler, err := tusd.NewUnroutedHandler(tusd.Config{
-		BasePath:              "/api/tus/",
+		BasePath:              basePath,
 		StoreComposer:         composer,
 		NotifyCompleteUploads: true,
 	})
