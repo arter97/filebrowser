@@ -142,6 +142,7 @@ async function postResources(
 
 function moveCopy(items, copy = false, overwrite = false, rename = false) {
   let promises = [];
+
   for (let item of items) {
     const from = item.from;
     const to = encodeURIComponent(removePrefix(item.to));
