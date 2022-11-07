@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -47,18 +48,42 @@ func NewTusHandler(store *storage.Storage, server *settings.Server, apiPath stri
 	return tusHandler, nil
 }
 
+func getBasePathFromRequest(r *http.Request, apiPath string) (*url.URL, error) {
+	// The tus protocol is designed to return a location header in its response, guiding the client to the correct endpoint.
+	// However, in proxied environments, we cannot know the correct URL at compile time
+	// We therefore make use of the Request-URI as sent by the client (https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html)
+	// Since we know this URI always contains the api path "/api/tus" we configured, we can form the basePath for tus accordingly
+	// In case this is a scheme-less URI, we prepend the origin header to form a full URL that has initially been requested
+	if idx := strings.Index(r.RequestURI, apiPath); idx < 0 {
+		return nil, fmt.Errorf("Expected URI to contain " + apiPath)
+	} else {
+		if basePath, err := url.Parse(r.RequestURI[:(idx + len(apiPath))]); err != nil {
+			return nil, err
+		} else {
+			if len(basePath.Scheme) != 0 {
+				return basePath, nil
+			}
+			if origin, ok := r.Header["Origin"]; !ok || len(origin) == 0 || len(origin[0]) == 0 {
+				return nil, fmt.Errorf("Client sent a request to a relative tus URL. " +
+					"Expected Origin header to be set in this case to form an absolute URL.")
+			} else {
+				parsedOrigin, err := url.Parse(origin[0])
+				if err != nil {
+					return nil, err
+				}
+				return parsedOrigin.ResolveReference(basePath), nil
+			}
+		}
+	}
+}
+
 func (th tusHandler) getOrCreateTusHandler(d *data, r *http.Request) (*tusd.UnroutedHandler, error) {
 	if handler, ok := th.handlers[d.user.ID]; !ok {
 		log.Printf("Creating tus handler for user %s\n", d.user.Username)
-		// The tus protocol is designed to send a location header in its response, guiding the client to the correct endpoint.
-		// However, in proxied environments, we cannot know the correct URI at compile time
-		// We therefore make use of the Request-URI sent by the client (https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html)
-		// Since we know this URI always contains the api path we configured, we can form the basePath for tus accordingly
-		if idx := strings.Index(r.RequestURI, th.apiPath); idx < 0 {
-			return nil, fmt.Errorf("Expected URI to contain " + th.apiPath)
+		if basePath, err := getBasePathFromRequest(r, th.apiPath); err != nil {
+			return nil, err
 		} else {
-			basePath := r.RequestURI[:(idx + len(th.apiPath))]
-			handler = th.createTusHandler(d, basePath)
+			handler = th.createTusHandler(d, basePath.String())
 			th.handlers[d.user.ID] = handler
 			return handler, nil
 		}
