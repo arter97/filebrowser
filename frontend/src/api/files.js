@@ -1,7 +1,7 @@
 import { createURL, fetchURL, removePrefix } from "./utils";
 import { baseURL } from "@/utils/constants";
 import store from "@/store";
-import {upload as postTus, chunkSize} from "./tus";
+import { upload as postTus, chunkSize } from "./tus";
 
 export async function fetch(url) {
   url = removePrefix(url);
@@ -82,23 +82,19 @@ export async function post(url, content = "", overwrite = false, onupload) {
   // Use the pre-existing API if:
   const useResourcesApi =
     // a folder is being created
-    url.endsWith("/") || 
+    url.endsWith("/") ||
     // file is smaller than the upload chunk size
     (content instanceof Blob && content.size < chunkSize) ||
     // We're not using http(s)
-    (content instanceof Blob && !["http:", "https:"].includes(window.location.protocol));
+    (content instanceof Blob &&
+      !["http:", "https:"].includes(window.location.protocol));
 
   return useResourcesApi
     ? postResources(url, content, overwrite, onupload)
     : postTus(url, content, overwrite, onupload);
 }
 
-async function postResources(
-  url,
-  content = "",
-  overwrite = false,
-  onupload
-) {
+async function postResources(url, content = "", overwrite = false, onupload) {
   url = removePrefix(url);
 
   let bufferContent;
