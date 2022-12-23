@@ -48,3 +48,7 @@ export async function upload(url, content = "", overwrite = false, onupload) {
     });
   });
 }
+
+export async function isTusSupported() {
+  return tus.isSupported === true;
+}

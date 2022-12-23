@@ -54,42 +54,44 @@ func getBasePathFromRequest(r *http.Request, apiPath string) (*url.URL, error) {
 	// We therefore make use of the Request-URI as sent by the client (https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html)
 	// Since we know this URI always contains the api path "/api/tus" we configured, we can form the basePath for tus accordingly
 	// In case this is a scheme-less URI, we prepend the origin header to form a full URL that has initially been requested
-	if idx := strings.Index(r.RequestURI, apiPath); idx < 0 {
+	idx := strings.Index(r.RequestURI, apiPath)
+	if idx < 0 {
 		return nil, fmt.Errorf("Expected URI to contain " + apiPath)
-	} else {
-		if basePath, err := url.Parse(r.RequestURI[:(idx + len(apiPath))]); err != nil {
-			return nil, err
-		} else {
-			if len(basePath.Scheme) != 0 {
-				return basePath, nil
-			}
-			if origin, ok := r.Header["Origin"]; !ok || len(origin) == 0 || len(origin[0]) == 0 {
-				return nil, fmt.Errorf("Client sent a request to a relative tus URL. " +
-					"Expected Origin header to be set in this case to form an absolute URL.")
-			} else {
-				parsedOrigin, err := url.Parse(origin[0])
-				if err != nil {
-					return nil, err
-				}
-				return parsedOrigin.ResolveReference(basePath), nil
-			}
-		}
 	}
+
+	basePath, err := url.Parse(r.RequestURI[:(idx + len(apiPath))])
+	if err != nil {
+		return nil, err
+	}
+	if len(basePath.Scheme) != 0 {
+		return basePath, nil
+	}
+
+	origin, ok := r.Header["Origin"]
+	if !ok || len(origin) == 0 || len(origin[0]) == 0 {
+		return nil, fmt.Errorf("Client sent a request to a relative tus URL. " +
+			"Expected Origin header to be set in this case to form an absolute URL.")
+	}
+	parsedOrigin, err := url.Parse(origin[0])
+	if err != nil {
+		return nil, err
+	}
+	return parsedOrigin.ResolveReference(basePath), nil
 }
 
 func (th tusHandler) getOrCreateTusHandler(d *data, r *http.Request) (*tusd.UnroutedHandler, error) {
-	if handler, ok := th.handlers[d.user.ID]; !ok {
+	handler, ok := th.handlers[d.user.ID]
+	if !ok {
 		log.Printf("Creating tus handler for user %s\n", d.user.Username)
-		if basePath, err := getBasePathFromRequest(r, th.apiPath); err != nil {
+		basePath, err := getBasePathFromRequest(r, th.apiPath)
+		if err != nil {
 			return nil, err
-		} else {
-			handler = th.createTusHandler(d, basePath.String())
-			th.handlers[d.user.ID] = handler
-			return handler, nil
 		}
-	} else {
-		return handler, nil
+		handler = th.createTusHandler(d, basePath.String())
+		th.handlers[d.user.ID] = handler
 	}
+
+	return handler, nil
 }
 
 func (th tusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -217,21 +219,24 @@ func (th tusHandler) handleTusFileUploaded(handler *tusd.UnroutedHandler, d *dat
 
 	// Remove uploaded tmp files for finished upload (.info objects are created and need to be removed, too))
 	for _, partialUpload := range append(event.Upload.PartialUploads, event.Upload.ID) {
-		if filesToDelete, err := filepath.Glob(filepath.Join(uploadDir, partialUpload+"*")); err != nil {
+		filesToDelete, err := filepath.Glob(filepath.Join(uploadDir, partialUpload+"*"))
+		if err != nil {
 			return err
-		} else {
-			for _, f := range filesToDelete {
-				if err := os.Remove(f); err != nil {
-					return err
-				}
+		}
+		for _, f := range filesToDelete {
+			if err := os.Remove(f); err != nil {
+				return err
 			}
 		}
 	}
 
 	// Delete folder basePath if it is empty
-	if dir, err := ioutil.ReadDir(uploadDir); err != nil {
+	dir, err := ioutil.ReadDir(uploadDir)
+	if err != nil {
 		return err
-	} else if len(dir) == 0 {
+	}
+
+	if len(dir) == 0 {
 		// os.Remove won't remove non-empty folders in case of race condition
 		if err := os.Remove(uploadDir); err != nil {
 			return err
