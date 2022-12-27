@@ -92,6 +92,37 @@
               id="branding-files"
             />
           </p>
+
+          <h3>{{ $t("settings.tusUploads") }}</h3>
+
+          <i18n path="settings.tusUploadsHelp" tag="p" class="small">
+            <a class="link" target="_blank" href="https://tus.io/"
+              >$t("settings.documentation")</a
+            >
+          </i18n>
+
+          <p>
+            <input
+              type="checkbox"
+              v-model="settings.tus.enabled"
+              id="tus-enabled"
+            />
+            {{ $t("settings.tusUploadsEnabled") }}
+          </p>
+
+          <p v-if="settings.tus.enabled">
+            <label for="tus-chunkSize">{{
+              $t("settings.tusUploadsChunkSize")
+            }}</label>
+            <input
+              class="input input--block"
+              type="number"
+              v-model.number="settings.tus.chunkSize"
+              id="tus-chunkSize"
+              min="0"
+              step="1000000"
+            />
+          </p>
         </div>
 
         <div class="card-action">

@@ -1,7 +1,7 @@
 import { createURL, fetchURL, removePrefix } from "./utils";
 import { baseURL } from "@/utils/constants";
 import store from "@/store";
-import { upload as postTus, chunkSize, isTusSupported } from "./tus";
+import { upload as postTus, useTus } from "./tus";
 
 export async function fetch(url) {
   url = removePrefix(url);
@@ -83,13 +83,11 @@ export async function post(url, content = "", overwrite = false, onupload) {
   const useResourcesApi =
     // a folder is being created
     url.endsWith("/") ||
-    // tus is not supported
-    !isTusSupported() ||
-    // file is smaller than the upload chunk size
-    (content instanceof Blob && content.size < chunkSize) ||
     // We're not using http(s)
     (content instanceof Blob &&
-      !["http:", "https:"].includes(window.location.protocol));
+      !["http:", "https:"].includes(window.location.protocol)) ||
+    // Tus is disabled / not applicable
+    !(await useTus(content));
 
   return useResourcesApi
     ? postResources(url, content, overwrite, onupload)
