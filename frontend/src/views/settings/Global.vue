@@ -111,6 +111,19 @@
           </p>
 
           <p v-if="settings.tus.enabled">
+            <label for="tus-parallelUploads">{{
+              $t("settings.tusUploadsParallelUploads")
+            }}</label>
+            <input
+              class="input input--block"
+              type="number"
+              v-model.number="settings.tus.parallelUploads"
+              id="tus-parallelUploads"
+              min="1"
+            />
+          </p>
+
+          <p v-if="settings.tus.enabled">
             <label for="tus-chunkSize">{{
               $t("settings.tusUploadsChunkSize")
             }}</label>
@@ -121,6 +134,47 @@
               id="tus-chunkSize"
               min="0"
               step="1000000"
+            />
+          </p>
+
+          <p v-if="settings.tus.enabled">
+            <label for="tus-retryCount">{{
+              $t("settings.tusUploadsRetryCount")
+            }}</label>
+            <input
+              class="input input--block"
+              type="number"
+              v-model.number="settings.tus.retryCount"
+              id="tus-retryCount"
+              min="0"
+            />
+          </p>
+
+          <p v-if="settings.tus.enabled && settings.tus.retryCount > 0">
+            <label for="tus-retryBaseDelay">{{
+              $t("settings.tusUploadsRetryBaseDelay")
+            }}</label>
+            <input
+              class="input input--block"
+              type="number"
+              v-model.number="settings.tus.retryBaseDelay"
+              id="tus-retryBaseDelay"
+              min="0"
+              step="1000"
+            />
+          </p>
+
+          <p v-if="settings.tus.enabled && settings.tus.retryCount > 0">
+            <label for="tus-retryBackoff">{{
+              $t("settings.tusUploadsRetryBackoff")
+            }}</label>
+            <input
+              class="input input--block"
+              type="number"
+              v-model.number="settings.tus.retryBackoff"
+              id="tus-retryBackoff"
+              min="1"
+              step="0.5"
             />
           </p>
         </div>
