@@ -60,7 +60,7 @@ function computeRetryDelays(tusSettings) {
 }
 
 export async function useTus(content) {
-  if (!(isTusSupported() || content instanceof Blob)) {
+  if (!isTusSupported() || !(content instanceof Blob)) {
     return false;
   }
   const tusSettings = await getTusSettings();
