@@ -52,9 +52,10 @@ function computeRetryDelays(tusSettings) {
     // Disable retries altogether
     return null;
   }
+  // The tus client expects our retries as an array with computed backoffs
+  // E.g.: [0, 3000, 5000, 10000, 20000]
   return Array.apply(null, { length: tusSettings.retryCount }).map(
-    Number.call,
-    (idx) => (idx + 1) * tusSettings.retryBaseDelay * tusSettings.retryBackoff
+    (_, idx) => (idx + 1) * tusSettings.retryBaseDelay * tusSettings.retryBackoff
   );
 }
 
