@@ -96,8 +96,11 @@
           <h3>{{ $t("settings.tusUploads") }}</h3>
 
           <i18n path="settings.tusUploadsHelp" tag="p" class="small">
-            <a class="link" target="_blank" href="https://tus.io/"
-              >$t("settings.documentation")</a
+            <a
+              class="link"
+              target="_blank"
+              href="https://tus.io/"
+              >documentation</a
             >
           </i18n>
 
