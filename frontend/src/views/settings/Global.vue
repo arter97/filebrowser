@@ -113,7 +113,7 @@
             {{ $t("settings.tusUploadsEnabled") }}
           </p>
 
-          <p v-if="settings.tus.enabled">
+          <div class="tusConditionalSettings">
             <label for="tus-parallelUploads">{{
               $t("settings.tusUploadsParallelUploads")
             }}</label>
@@ -122,11 +122,10 @@
               type="number"
               v-model.number="settings.tus.parallelUploads"
               id="tus-parallelUploads"
+              v-bind:disabled="!settings.tus.enabled"
               min="1"
             />
-          </p>
 
-          <p v-if="settings.tus.enabled">
             <label for="tus-chunkSize">{{
               $t("settings.tusUploadsChunkSize")
             }}</label>
@@ -135,12 +134,11 @@
               type="number"
               v-model.number="settings.tus.chunkSize"
               id="tus-chunkSize"
+              v-bind:disabled="!settings.tus.enabled"
               min="0"
               step="1000000"
             />
-          </p>
 
-          <p v-if="settings.tus.enabled">
             <label for="tus-retryCount">{{
               $t("settings.tusUploadsRetryCount")
             }}</label>
@@ -149,11 +147,10 @@
               type="number"
               v-model.number="settings.tus.retryCount"
               id="tus-retryCount"
+              v-bind:disabled="!settings.tus.enabled"
               min="0"
             />
-          </p>
 
-          <p v-if="settings.tus.enabled && settings.tus.retryCount > 0">
             <label for="tus-retryBaseDelay">{{
               $t("settings.tusUploadsRetryBaseDelay")
             }}</label>
@@ -162,12 +159,11 @@
               type="number"
               v-model.number="settings.tus.retryBaseDelay"
               id="tus-retryBaseDelay"
+              v-bind:disabled="!settings.tus.enabled || settings.tus.retryCount < 1"
               min="0"
               step="1000"
             />
-          </p>
 
-          <p v-if="settings.tus.enabled && settings.tus.retryCount > 0">
             <label for="tus-retryBackoff">{{
               $t("settings.tusUploadsRetryBackoff")
             }}</label>
@@ -176,10 +172,11 @@
               type="number"
               v-model.number="settings.tus.retryBackoff"
               id="tus-retryBackoff"
+              v-bind:disabled="!settings.tus.enabled || settings.tus.retryCount < 1"
               min="1"
               step="0.5"
             />
-          </p>
+          </div>
         </div>
 
         <div class="card-action">
