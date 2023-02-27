@@ -1,5 +1,6 @@
 const name = window.FileBrowser.Name || "File Browser";
 const disableExternal = window.FileBrowser.DisableExternal;
+const disableUsedPercentage = window.FileBrowser.DisableUsedPercentage;
 const baseURL = window.FileBrowser.BaseURL;
 const staticURL = window.FileBrowser.StaticURL;
 const recaptcha = window.FileBrowser.ReCaptcha;
@@ -20,6 +21,7 @@ const tusEndpoint = `${baseURL}/api/tus`;
 export {
   name,
   disableExternal,
+  disableUsedPercentage,
   baseURL,
   logoURL,
   recaptcha,
