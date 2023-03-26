@@ -36,6 +36,13 @@ var settingsGetHandler = withAdmin(func(w http.ResponseWriter, r *http.Request, 
 	return renderJSON(w, r, data)
 })
 
+// Tus settings are queried by the frontend before uploading files using the tus protocol.
+// While these settings are included with the getSettings handler, it requires admin privileges.
+// However, all users should be able to query these settings in order to upload data.
+var tusSettingsGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	return renderJSON(w, r, d.settings.Tus)
+})
+
 var settingsPutHandler = withAdmin(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	req := &settingsData{}
 	err := json.NewDecoder(r.Body).Decode(req)

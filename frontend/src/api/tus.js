@@ -76,8 +76,7 @@ async function getTusSettings() {
   if (temporaryTusSettings) {
     return temporaryTusSettings;
   }
-  const fbSettings = await settings.get();
-  temporaryTusSettings = fbSettings.tus;
+  temporaryTusSettings = await settings.getTusSettings();
   return temporaryTusSettings;
 }
 
